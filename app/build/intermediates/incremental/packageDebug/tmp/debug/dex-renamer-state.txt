@@ -1,0 +1,7 @@
+#Fri Apr 10 17:41:40 AEST 2020
+base.0=/home/nspain/AndroidStudioProjects/ContactGraph/app/build/intermediates/dex/debug/mergeExtDexDebug/out/classes.dex
+path.1=classes.dex
+renamed.1=classes2.dex
+path.0=classes.dex
+renamed.0=classes.dex
+base.1=/home/nspain/AndroidStudioProjects/ContactGraph/app/build/intermediates/dex/debug/mergeProjectDexDebug/out/classes.dex
