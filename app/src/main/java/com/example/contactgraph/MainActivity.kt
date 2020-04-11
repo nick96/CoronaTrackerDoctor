@@ -24,6 +24,8 @@ private fun ByteArray.toHexString() = joinToString("") { "%02x".format(it) }
 class MainActivity : AppCompatActivity() {
     private val sha256 = MessageDigest.getInstance("SHA-256")
 
+    private var mReceivedKey: String? = null
+
     private val mHandler = @SuppressLint("HandlerLeak")
     object : Handler() {
         override fun handleMessage(msg: Message) {
@@ -36,6 +38,7 @@ class MainActivity : AppCompatActivity() {
                     val view = findViewById<View>(android.R.id.content)
                     Snackbar.make(view, "Received message $readMessage", Snackbar.LENGTH_SHORT)
                         .show()
+                    mReceivedKey = readMessage
                 }
             }
         }
@@ -79,7 +82,7 @@ class MainActivity : AppCompatActivity() {
                 Log.d("bluetooth", "Creating bluetooth service")
                 mBluetoothService = BluetoothService(mHandler)
             } else {
-                Log.d("bluetooth" , "BT not enabled")
+                Log.d("bluetooth", "BT not enabled")
                 Toast.makeText(this, "Bluetooth was not enabled", Toast.LENGTH_SHORT).show()
                 finish()
             }
@@ -91,16 +94,6 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        val prefs = getPreferences(Context.MODE_PRIVATE)
-        var key = prefs.getString("key", null)
-        if (key == null) {
-            key = UUID.randomUUID().toString()
-            with(prefs.edit()) {
-                putString("key", key)
-                commit()
-            }
-        }
-
         val retrofit = Retrofit.Builder()
             .baseUrl("https://contact-graph.herokuapp.com")
             .addConverterFactory(GsonConverterFactory.create())
@@ -110,6 +103,16 @@ class MainActivity : AppCompatActivity() {
 
         val positiveButton = findViewById<Button>(R.id.positive)
         positiveButton.setOnClickListener { v ->
+            if (mReceivedKey == null) {
+                Snackbar.make(
+                    v,
+                    "Could not find the key to send. Please ask your patient to resend it.",
+                    Snackbar.LENGTH_SHORT
+                )
+                return@setOnClickListener
+            }
+            val key = mReceivedKey!!
+
             val checksum = sha256.digest(key.toByteArray()).toHexString()
             val hash = sha256.digest((key + checksum).toByteArray()).toHexString()
             val call = service.addPositive(PositiveRequest(key, checksum, hash))
@@ -148,67 +151,6 @@ class MainActivity : AppCompatActivity() {
                                 Snackbar.make(
                                     v,
                                     "There was a problem sending the positive test notification. Please contact the developer",
-                                    Snackbar.LENGTH_SHORT
-                                )
-                            }
-                        }
-                        else -> {
-                            val error = parseError(retrofit, response)
-                            Log.i("contact", "There was a server side error: $error")
-                            Snackbar.make(
-                                v,
-                                "There was a problem with the server. Please try again later",
-                                Snackbar.LENGTH_SHORT
-                            )
-                        }
-                    }
-                    snack.setAction("DISMISS") {}
-                    snack.show()
-                }
-
-            })
-        }
-
-        val contactButton = findViewById<Button>(R.id.contact)
-        contactButton.setOnClickListener { v ->
-            val checksum = sha256.digest(key.toByteArray()).toHexString()
-            val hash = sha256.digest((key + checksum).toByteArray()).toHexString()
-            val call = service.addContact(ContactRequest(key, checksum, hash))
-            call.enqueue(object : Callback<Unit> {
-                override fun onFailure(call: Call<Unit>, t: Throwable) {
-                    Log.e("contact", "Failed to send createContact request: $t")
-                    val snack = Snackbar.make(
-                        v,
-                        "An anonymous notification of your positive test has been sent out",
-                        Snackbar.LENGTH_SHORT
-                    )
-                    snack.setAction("DISMISS") {}
-                    snack.show()
-                }
-
-                override fun onResponse(
-                    call: Call<Unit>,
-                    response: Response<Unit>
-                ) {
-                    val snack = when {
-                        response.code() in 200..299 -> Snackbar.make(
-                            v,
-                            "An anonymous notification of your contact with positive test has been sent out",
-                            Snackbar.LENGTH_SHORT
-                        )
-                        response.code() in 400..499 -> {
-                            val error = parseError(retrofit, response)
-                            if (error.error.title == "IntegrityError") {
-                                Snackbar.make(
-                                    v,
-                                    "You've already sent notification of contact with a positive test. Thank you!",
-                                    Snackbar.LENGTH_SHORT
-                                )
-                            } else {
-                                Log.i("contact", "There was a client side error: $error")
-                                Snackbar.make(
-                                    v,
-                                    "There was a problem sending contact with positive test notification. Please contact the developer",
                                     Snackbar.LENGTH_SHORT
                                 )
                             }
