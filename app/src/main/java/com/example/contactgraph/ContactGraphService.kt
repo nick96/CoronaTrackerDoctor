@@ -20,13 +20,13 @@ interface ContactGraphService {
     fun getPositives(): Call<PositiveResponse>
 
     @POST("/positive")
-    fun addPositive(@Body positiveRequest: PositiveRequest): Call<PositiveResponse>
+    fun addPositive(@Body positiveRequest: PositiveRequest): Call<Unit>
 
     @GET("/contact")
     fun getContacts(): Call<ContactResponse>
 
     @POST("/contact")
-    fun addContact(@Body contactRequest: ContactRequest): Call<ContactResponse>
+    fun addContact(@Body contactRequest: ContactRequest): Call<Unit>
 }
 
 fun parseError(retrofit: Retrofit, response: Response<*>): ErrorResponse {

@@ -1,9 +1,17 @@
 package com.example.contactgraph
 
+import android.annotation.SuppressLint
+import android.app.Activity
+import android.bluetooth.BluetoothAdapter
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Message
 import android.util.Log
+import android.view.View
 import android.widget.Button
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.snackbar.Snackbar
 import retrofit2.*
@@ -15,6 +23,69 @@ private fun ByteArray.toHexString() = joinToString("") { "%02x".format(it) }
 
 class MainActivity : AppCompatActivity() {
     private val sha256 = MessageDigest.getInstance("SHA-256")
+
+    private val mHandler = @SuppressLint("HandlerLeak")
+    object : Handler() {
+        override fun handleMessage(msg: Message) {
+            Log.d("handler", "Received message: $msg")
+            when (msg.what) {
+                Constants.MESSAGE_READ -> {
+                    val readBuf = msg.obj as ByteArray
+                    // construct a string from the valid bytes in the buffer
+                    val readMessage = String(readBuf, 0, msg.arg1)
+                    val view = findViewById<View>(android.R.id.content)
+                    Snackbar.make(view, "Received message $readMessage", Snackbar.LENGTH_SHORT)
+                        .show()
+                }
+            }
+        }
+    }
+    private val mBluetoothAdatapter = BluetoothAdapter.getDefaultAdapter()
+
+    private var mBluetoothService: BluetoothService? = null
+
+    override fun onResume() {
+        super.onResume()
+        Log.d("resume", "Resume!")
+        if (mBluetoothService != null) {
+            Log.d("bluetooth", "BT service is not null")
+            if (mBluetoothService!!.threadState == BluetoothService.STATE_NONE) {
+                Log.d("bluetooth", "Starting bluetooth service")
+                mBluetoothService!!.start()
+            }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (mBluetoothAdatapter == null) {
+            return
+        }
+
+        if (!mBluetoothAdatapter.isEnabled) {
+            Log.d("bluetooth", "BT is not enabling, requesting...")
+            val enableIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+            startActivityForResult(enableIntent, 3 /* Enable BT */)
+        } else {
+            Log.d("bluetooth", "BT is already enabled! Creating bluetooth service")
+            mBluetoothService = BluetoothService(mHandler)
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        Log.d("activityResult", "Received activity result for request $requestCode")
+        if (requestCode == 3) {
+            if (resultCode == Activity.RESULT_OK) {
+                Log.d("bluetooth", "Creating bluetooth service")
+                mBluetoothService = BluetoothService(mHandler)
+            } else {
+                Log.d("bluetooth" , "BT not enabled")
+                Toast.makeText(this, "Bluetooth was not enabled", Toast.LENGTH_SHORT).show()
+                finish()
+            }
+        }
+//        super.onActivityResult(requestCode, resultCode, data)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,8 +113,8 @@ class MainActivity : AppCompatActivity() {
             val checksum = sha256.digest(key.toByteArray()).toHexString()
             val hash = sha256.digest((key + checksum).toByteArray()).toHexString()
             val call = service.addPositive(PositiveRequest(key, checksum, hash))
-            call.enqueue(object : Callback<PositiveResponse> {
-                override fun onFailure(call: Call<PositiveResponse>, t: Throwable) {
+            call.enqueue(object : Callback<Unit> {
+                override fun onFailure(call: Call<Unit>, t: Throwable) {
                     Log.e("positive", "Failed to send createPositive request: $t")
                     val snack = Snackbar.make(
                         v,
@@ -55,8 +126,8 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 override fun onResponse(
-                    call: Call<PositiveResponse>,
-                    response: Response<PositiveResponse>
+                    call: Call<Unit>,
+                    response: Response<Unit>
                 ) {
                     val snack = when {
                         response.code() in 200..299 -> Snackbar.make(
@@ -103,8 +174,8 @@ class MainActivity : AppCompatActivity() {
             val checksum = sha256.digest(key.toByteArray()).toHexString()
             val hash = sha256.digest((key + checksum).toByteArray()).toHexString()
             val call = service.addContact(ContactRequest(key, checksum, hash))
-            call.enqueue(object : Callback<ContactResponse> {
-                override fun onFailure(call: Call<ContactResponse>, t: Throwable) {
+            call.enqueue(object : Callback<Unit> {
+                override fun onFailure(call: Call<Unit>, t: Throwable) {
                     Log.e("contact", "Failed to send createContact request: $t")
                     val snack = Snackbar.make(
                         v,
@@ -116,8 +187,8 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 override fun onResponse(
-                    call: Call<ContactResponse>,
-                    response: Response<ContactResponse>
+                    call: Call<Unit>,
+                    response: Response<Unit>
                 ) {
                     val snack = when {
                         response.code() in 200..299 -> Snackbar.make(
